@@ -1,7 +1,8 @@
-# Byte-compiled files
+# Byte-compiled files and pkl files
 __pycache__/
 *.py[cod]
 *$py.class
+*.pkl
 
 # C extensions
 *.so
@@ -94,3 +95,5 @@ out/
 # Environment variables
 .env
 .env.*
+
+.mypy_cache

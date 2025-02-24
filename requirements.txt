@@ -2,3 +2,4 @@ types-tqdm
 tqdm
 numpy
 matplotlib
+pandas

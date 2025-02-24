@@ -15,10 +15,18 @@ def batch_generator(train_x, train_y, batch_size):
 
     :return tuple: (batch_x, batch_y) where batch_x has shape (B, f) and batch_y has shape (B, q). The last batch may be smaller.
     """
-    for i in range(0, train_x.shape[0], batch_size):
-        batch_x = train_x[i:i + batch_size]
-        batch_y = train_y[i:i + batch_size]
+    # Shuffle the indices
+    indices = np.arange(train_x.shape[0])
+    np.random.shuffle(indices)
 
+    # Reorder the arrays based on the shuffled indices
+    train_x_shuffled = train_x[indices]
+    train_y_shuffled = train_y[indices]
+
+    # Yield batches from the shuffled data
+    for i in range(0, train_x_shuffled.shape[0], batch_size):
+        batch_x = train_x_shuffled[i:i + batch_size]
+        batch_y = train_y_shuffled[i:i + batch_size]
         yield (batch_x, batch_y)
 
 class ActivationFunction(ABC):
@@ -45,7 +53,15 @@ class ActivationFunction(ABC):
 
 class Sigmoid(ActivationFunction):
     def forward(self, x: np.ndarray) -> np.ndarray:
-        return 1 / (1 + np.exp(-x))
+        out = np.empty_like(x)
+        
+        pos_mask = x >= 0
+        out[pos_mask] = 1 / (1 + np.exp(-x[pos_mask]))
+        
+        neg_mask = ~pos_mask
+        out[neg_mask] = np.exp(x[neg_mask]) / (1 + np.exp(x[neg_mask]))
+        
+        return out
 
     def derivative(self, x: np.ndarray) -> np.ndarray:
         Sig_x = self.forward(x)
@@ -67,13 +83,12 @@ class Relu(ActivationFunction):
 
 class Softmax(ActivationFunction):
     def forward(self, x: np.ndarray) -> np.ndarray:
-        e_zi = np.exp(x - np.max(x, axis=-1, keepdims=True))
-        return e_zi / np.sum(e_zi, axis=-1, keepdims=True)
+            exp_x = np.exp(x - np.max(x, axis=1, keepdims=True))
+            return exp_x / exp_x.sum()
 
     def derivative(self, x: np.ndarray) -> np.ndarray:
         Sx: np.ndarray = self.forward(x)
-        return np.diagflat(Sx) -  Sx @ np.transpose(Sx)
-
+        return np.diagflat(Sx) - np.dot(Sx, Sx.T)
 
 class Linear(ActivationFunction):
     def forward(self, x: np.ndarray) -> np.ndarray:
@@ -87,7 +102,7 @@ class Softplus(ActivationFunction):
         return np.log1p(np.exp(-np.abs(x))) + np.maximum(x, 0)
 
     def derivative(self, x: np.ndarray) -> np.ndarray:
-        return 1 / (1 + np.exp(-x))
+        return Sigmoid().forward(x)
 
 class Mish(ActivationFunction):
     def forward(self, x: np.ndarray) -> np.ndarray:
@@ -111,14 +126,14 @@ class SquaredError(LossFunction):
         return np.square(y_true - y_pred)
 
     def derivative(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
-        return 2 * (y_pred.reshape(-1,1) - y_true.reshape(-1,1))
+        return 2 * (y_pred - y_true.reshape(-1,1))
 
 class CrossEntropy(LossFunction):
     def loss(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
         return -np.sum(y_true * np.log(np.clip(y_pred, 1e-10, 1.0)), axis=1)
 
     def derivative(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
-        return -y_true / np.clip(y_pred, 1e-10, 1.0)
+        return y_pred - y_true
 
 class Layer:
     def __init__(self, fan_in: int, fan_out: int, activation_function: ActivationFunction):
@@ -133,17 +148,16 @@ class Layer:
         self.fan_out = fan_out
         self.activation_function = activation_function
 
-        # this will store the activations (forward prop)
         self.activations = np.empty((fan_in, fan_out))
-        # this will store the delta term (dL_dPhi, backward prop)
         self.delta = np.empty((fan_in, fan_out))
 
         self.input = None
         self.z = None
 
         # Initialize weights and biaes
-        self.W = np.random.randn(fan_in, fan_out) * 0.01 
-        self.b = np.random.randn(1, fan_out) 
+        limit = np.sqrt(6 / (fan_in + fan_out))
+        self.W = np.random.uniform(-limit, limit, (fan_in, fan_out))
+        self.b = np.random.randn(1, fan_out)
 
     def forward(self, h: np.ndarray) -> np.ndarray:
         """
@@ -153,40 +167,27 @@ class Layer:
         :return: layer activations
         """
         self.input = h
-        #print("h shape:", h.shape)
-        #print("W shape:", self.W.shape)
-        #print("self.b shape", self.b.shape)
-
         self.z = np.dot(h, self.W) + self.b
 
-        #print("self.z shape:", self.z.shape)
         self.activations = self.activation_function.forward(self.z)
         return self.activations
 
-    def backward(self, h: np.ndarray, delta: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def backward(self, delta: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         Apply backpropagation to this layer and return the weight and bias gradients
 
-        :param h: input to this layer
         :param delta: delta term from layer above
         :return: (weight gradients, bias gradients)
         """
 
-        f_prime = self.activation_function.derivative(self.z)  # Compute activation derivative
-        print("delta shape: ", delta.shape)
-        print("f_prime shape: ", f_prime.shape)
+        f_prime = self.activation_function.derivative(self.z)
 
         delta_l = delta * f_prime
-        print("h shape: ", h.shape)
 
-        dL_dW = np.dot(h.T, delta_l)
+        dL_dW = np.dot(self.input.T, delta_l)
         dL_db = np.sum(delta_l, axis=0, keepdims=True) 
 
-        #print("Self.W: ", self.W)
-        print("Self.W shape: ", self.W.shape)
         self.delta = np.dot(delta_l, self.W.T) 
-        print("dL_dW: ", dL_dW.shape)
-        print("dL_db: ", dL_db.shape)
         return dL_dW, dL_db
 
 class MultilayerPerceptron:
@@ -208,18 +209,18 @@ class MultilayerPerceptron:
 
         return x
 
-    def backward(self, loss_grad: np.ndarray, input_data: np.ndarray) -> Tuple[list, list]:
+    def backward(self, loss_grad: np.ndarray) -> Tuple[list, list]:
         """
         Applies backpropagation to compute the gradients of the weights and biases for all layers in the network
         :param loss_grad: gradient of the loss function
-        :param input_data: network's input data
         :return: (List of weight gradients for all layers, List of bias gradients for all layers)
         """
         dl_dw_all: list = []
         dl_db_all: list = []
 
         for layer in reversed(self.layers):
-            dL_dW, dL_db = layer.backward(input_data, loss_grad)
+            dL_dW, dL_db = layer.backward(loss_grad)
+            loss_grad = layer.delta
             dl_dw_all.insert(0, dL_dW)
             dl_db_all.insert(0, dL_db)
 
@@ -241,31 +242,30 @@ class MultilayerPerceptron:
         """
         training_losses = np.zeros(epochs)
         validation_losses = np.zeros(epochs)
-        n_train = train_x.shape[0]
 
         for epoch in tqdm(range(epochs), desc='Training'):
 
             epoch_loss = 0.0
+            n_train = 0.0
 
             for batch_x, batch_y in batch_generator(train_x, train_y, batch_size):
-                output = self.forward(batch_x)
+                y_pred = self.forward(batch_x)
                 
-                #print("batch_y shape: ", batch_y.shape)
-                batch_loss = loss_func.loss(batch_y, output)
-                #print("batch loss shape", batch_loss.shape)
-                epoch_loss += np.sum(batch_loss)
-                loss_grad = loss_func.derivative(batch_y, output)
-                #print("loss_grad: ", loss_grad.shape)
-                dl_dw_all, dl_db_all = self.backward(loss_grad, output)
+                batch_loss = loss_func.loss(batch_y, y_pred)
+                epoch_loss += np.mean(batch_loss)
+                loss_grad = loss_func.derivative(batch_y, y_pred)
+                dl_dw_all, dl_db_all = self.backward(loss_grad)
 
                 for layer, dL_dW, dL_db in zip(self.layers, dl_dw_all, dl_db_all):
                     layer.W -= learning_rate * dL_dW
                     layer.b -= learning_rate * dL_db
+                
+                n_train += 1
 
             training_losses[epoch] = epoch_loss / n_train
 
-            val_output = self.forward(val_x)
-            val_loss = loss_func.loss(val_y, val_output)
+            val_pred = self.forward(val_x)
+            val_loss = loss_func.loss(val_y, val_pred)
             validation_losses[epoch] = np.mean(val_loss)
 
         return training_losses, validation_losses
