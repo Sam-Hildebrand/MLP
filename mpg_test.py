@@ -71,9 +71,9 @@ print(f"Samples in Training:   {len(X_train)}")
 print(f"Samples in Validation: {len(X_val)}")
 print(f"Samples in Testing:    {len(X_test)}")
 
-perceptron = mlp.MultilayerPerceptron((mlp.Layer(7, 32, mlp.Sigmoid()), mlp.Layer(32, 1, mlp.Linear())))
+perceptron = mlp.MultilayerPerceptron((mlp.Layer(7, 32, mlp.Softmax()), mlp.Layer(32, 1, mlp.Linear())))
 
-training_loss, validation_loss = perceptron.train(X_train.to_numpy(), y_train.to_numpy(), X_val.to_numpy(), y_val.to_numpy(), mlp.SquaredError(), learning_rate=0.00001, epochs=40, batch_size=64)
+training_loss, validation_loss = perceptron.train(X_train.to_numpy(), y_train.to_numpy(), X_val.to_numpy(), y_val.to_numpy(), mlp.CrossEntropy(), learning_rate=0.01, epochs=40, batch_size=64)
 
 plt.plot(training_loss, color='b', label='Training')
 plt.plot(validation_loss, color='r',linestyle='dashed', label="Validation")

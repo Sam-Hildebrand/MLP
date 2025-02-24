@@ -88,6 +88,7 @@ class Softmax(ActivationFunction):
 
     def derivative(self, x: np.ndarray) -> np.ndarray:
         Sx: np.ndarray = self.forward(x)
+        print("Sx shape: ", Sx.shape)
         return np.diagflat(Sx) - np.dot(Sx, Sx.T)
 
 class Linear(ActivationFunction):
@@ -130,64 +131,78 @@ class SquaredError(LossFunction):
 
 class CrossEntropy(LossFunction):
     def loss(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
-        return -np.sum(y_true * np.log(np.clip(y_pred, 1e-10, 1.0)), axis=1)
+        return -np.sum(y_true.reshape(-1,1) * np.log(np.clip(y_pred, 1e-10, 1.0)), axis=1)
 
     def derivative(self, y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
-        return y_pred - y_true
+        return y_pred - y_true.reshape(-1,1)
 
 class Layer:
-    def __init__(self, fan_in: int, fan_out: int, activation_function: ActivationFunction):
+    def __init__(self, fan_in: int, fan_out: int, activation_function: ActivationFunction, dropout_rate: float = 0.0):
         """
-        Initializes a layer of neurons
+        Initializes a layer of neurons with optional dropout.
 
-        :param fan_in: number of neurons in previous (presynpatic) layer
-        :param fan_out: number of neurons in this layer
-        :param activation_function: instance of an ActivationFunction
+        :param fan_in: number of neurons in the previous layer.
+        :param fan_out: number of neurons in this layer.
+        :param activation_function: instance of an ActivationFunction.
+        :param dropout_rate: probability of dropping a neuron activation (default 0.0 means no dropout).
         """
         self.fan_in = fan_in
         self.fan_out = fan_out
         self.activation_function = activation_function
+        self.dropout_rate = dropout_rate
 
         self.activations = np.empty((fan_in, fan_out))
         self.delta = np.empty((fan_in, fan_out))
 
         self.input = None
         self.z = None
+        self.dropout_mask = None
 
-        # Initialize weights and biaes
+        # Initialize weights and biases
         limit = np.sqrt(6 / (fan_in + fan_out))
         self.W = np.random.uniform(-limit, limit, (fan_in, fan_out))
         self.b = np.random.randn(1, fan_out)
 
-    def forward(self, h: np.ndarray) -> np.ndarray:
+    def forward(self, h: np.ndarray, training: bool) -> np.ndarray:
         """
-        Computes the activations for this layer
+        Computes the activations for this layer, applying dropout if in training mode.
 
-        :param h: input to layer
-        :return: layer activations
+        :param h: input to the layer.
+        :param training: if True, apply dropout; otherwise, use full activations.
+        :return: layer activations.
         """
         self.input = h
         self.z = np.dot(h, self.W) + self.b
-
         self.activations = self.activation_function.forward(self.z)
+
+        if training and self.dropout_rate > 0.0:
+            self.dropout_mask = (np.random.rand(*self.activations.shape) > self.dropout_rate).astype(float)
+            self.dropout_mask /= (1 - self.dropout_rate)
+            self.activations *= self.dropout_mask
+        else:
+            self.dropout_mask = None
+
         return self.activations
 
     def backward(self, delta: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Apply backpropagation to this layer and return the weight and bias gradients
+        Backpropagates the error through the layer.
 
-        :param delta: delta term from layer above
-        :return: (weight gradients, bias gradients)
+        :param delta: delta term from the next layer.
+        :return: (weight gradients, bias gradients).
         """
 
         f_prime = self.activation_function.derivative(self.z)
 
+        # If dropout was applied, only propagate gradients for non-dropped units
+        if self.dropout_mask is not None:
+            f_prime *= self.dropout_mask
+
         delta_l = delta * f_prime
 
         dL_dW = np.dot(self.input.T, delta_l)
-        dL_db = np.sum(delta_l, axis=0, keepdims=True) 
-
-        self.delta = np.dot(delta_l, self.W.T) 
+        dL_db = np.sum(delta_l, axis=0, keepdims=True)
+        self.delta = np.dot(delta_l, self.W.T)
         return dL_dW, dL_db
 
 class MultilayerPerceptron:
@@ -198,14 +213,14 @@ class MultilayerPerceptron:
         """
         self.layers = layers
 
-    def forward(self, x: np.ndarray) -> np.ndarray:
+    def forward(self, x: np.ndarray, training: bool = False) -> np.ndarray:
         """
         This takes the network input and computes the network output (forward propagation)
         :param x: network input
         :return: network output
         """
         for layer in self.layers:
-            x = layer.forward(x)
+            x = layer.forward(x, training)
 
         return x
 
@@ -249,7 +264,7 @@ class MultilayerPerceptron:
             n_train = 0.0
 
             for batch_x, batch_y in batch_generator(train_x, train_y, batch_size):
-                y_pred = self.forward(batch_x)
+                y_pred = self.forward(batch_x, training=True)
                 
                 batch_loss = loss_func.loss(batch_y, y_pred)
                 epoch_loss += np.mean(batch_loss)
