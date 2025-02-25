@@ -59,9 +59,10 @@ if __name__ == "__main__":
     training_loss, validation_loss = perceptron.train(
         train_x, train_y, val_x, val_y, 
         loss_func=mlp.SquaredError(),
-        learning_rate=0.0001,
+        learning_rate=0.001,
         batch_size=32,
-        epochs=64
+        epochs=32,
+        rmsprop=True
     )
 
     with open("MNIST_model.pkl", 'wb') as f:

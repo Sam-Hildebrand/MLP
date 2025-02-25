@@ -241,44 +241,55 @@ class MultilayerPerceptron:
 
         return dl_dw_all, dl_db_all
 
-    def train(self, train_x: np.ndarray, train_y: np.ndarray, val_x: np.ndarray, val_y: np.ndarray, loss_func: LossFunction, learning_rate: float=1E-3, batch_size: int=16, epochs: int=32,  rmsprop: bool=False) -> Tuple[np.ndarray, np.ndarray]:
+    def train(self, train_x: np.ndarray, train_y: np.ndarray, val_x: np.ndarray, val_y: np.ndarray, 
+              loss_func: LossFunction, learning_rate: float=1E-3, batch_size: int=16, epochs: int=32, 
+              rmsprop: bool=False, gamma: float=0.9, epsilon: float=1e-8) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Train the multilayer perceptron
-
-        :param train_x: full training set input of shape (n x d) n = number of samples, d = number of features
-        :param train_y: full training set output of shape (n x q) n = number of samples, q = number of outputs per sample
-        :param val_x: full validation set input
-        :param val_y: full validation set output
-        :param loss_func: instance of a LossFunction
-        :param learning_rate: learning rate for parameter updates
-        :param batch_size: size of each batch
-        :param epochs: number of epochs
-        :return:
+        Train the multilayer perceptron using mini-batch SGD or RMSProp
+        
+        :param train_x: Training input
+        :param train_y: Training output
+        :param val_x: Validation input
+        :param val_y: Validation output
+        :param loss_func: Loss function instance
+        :param learning_rate: Learning rate
+        :param batch_size: Batch size
+        :param epochs: Number of epochs
+        :param rmsprop: Boolean flag to enable RMSProp
+        :param gamma: Decay rate for RMSProp
+        :param epsilon: Smoothing term for RMSProp
         """
         training_losses = np.zeros(epochs)
         validation_losses = np.zeros(epochs)
 
+        # RMSProp accumulators
+        if rmsprop:
+            sq_grads_W = [np.zeros_like(layer.W) for layer in self.layers]
+            sq_grads_b = [np.zeros_like(layer.b) for layer in self.layers]
+
         for epoch in tqdm(range(epochs), desc='Training'):
-
-            epoch_loss = 0.0
-            n_train = 0.0
-
+            epoch_loss, n_train = 0.0, 0.0
+            
             for batch_x, batch_y in batch_generator(train_x, train_y, batch_size):
                 y_pred = self.forward(batch_x, training=True)
-                
                 batch_loss = loss_func.loss(batch_y, y_pred)
                 epoch_loss += np.mean(batch_loss)
                 loss_grad = loss_func.derivative(batch_y, y_pred)
                 dl_dw_all, dl_db_all = self.backward(loss_grad)
 
-                for layer, dL_dW, dL_db in zip(self.layers, dl_dw_all, dl_db_all):
-                    layer.W -= learning_rate * dL_dW
-                    layer.b -= learning_rate * dL_db
+                for i, (layer, dL_dW, dL_db) in enumerate(zip(self.layers, dl_dw_all, dl_db_all)):
+                    if rmsprop:
+                        sq_grads_W[i] = gamma * sq_grads_W[i] + (1 - gamma) * (dL_dW ** 2)
+                        sq_grads_b[i] = gamma * sq_grads_b[i] + (1 - gamma) * (dL_db ** 2)
+                        layer.W -= learning_rate * dL_dW / (np.sqrt(sq_grads_W[i]) + epsilon)
+                        layer.b -= learning_rate * dL_db / (np.sqrt(sq_grads_b[i]) + epsilon)
+                    else:
+                        layer.W -= learning_rate * dL_dW
+                        layer.b -= learning_rate * dL_db
                 
                 n_train += 1
-
+            
             training_losses[epoch] = epoch_loss / n_train
-
             val_pred = self.forward(val_x)
             val_loss = loss_func.loss(val_y, val_pred)
             validation_losses[epoch] = np.mean(val_loss)
