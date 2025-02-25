@@ -67,13 +67,22 @@ X_train = (X_train - X_mean) / X_std
 X_val = (X_val - X_mean) / X_std
 X_test = (X_test - X_mean) / X_std
 
+# Compute statistics for y (features)
+y_mean = y_train.mean(axis=0)  # Mean of each feature
+y_std = y_train.std(axis=0)    # Standard deviation of each feature
+
+# Standardize y
+y_train = (y_train - y_mean) / y_std
+y_val = (y_val - y_mean) / y_std
+y_test = (y_test - y_mean) / y_std
+
 print(f"Samples in Training:   {len(X_train)}")
 print(f"Samples in Validation: {len(X_val)}")
 print(f"Samples in Testing:    {len(X_test)}")
 
-perceptron = mlp.MultilayerPerceptron((mlp.Layer(7, 32, mlp.Sigmoid()), mlp.Layer(32, 1, mlp.Linear())))
+perceptron = mlp.MultilayerPerceptron((mlp.Layer(7, 128, mlp.Relu()),mlp.Layer(128, 256, mlp.Relu()), mlp.Layer(256, 64, mlp.Relu()), mlp.Layer(64, 1, mlp.Linear())))
 
-training_loss, validation_loss = perceptron.train(X_train.to_numpy(), y_train.to_numpy(), X_val.to_numpy(), y_val.to_numpy(), mlp.SquaredError(), learning_rate=0.0001, epochs=5, batch_size=64)
+training_loss, validation_loss = perceptron.train(X_train.to_numpy(), y_train.to_numpy(), X_val.to_numpy(), y_val.to_numpy(), mlp.SquaredError(), learning_rate=0.0001, epochs=40, batch_size=256)
 
 plt.plot(training_loss, color='b', label='Training')
 plt.plot(validation_loss, color='r',linestyle='dashed', label="Validation")
@@ -83,10 +92,14 @@ plt.xlabel("epoch")
 plt.legend()
 plt.show()
 
+pred_y = np.round(perceptron.forward(X_test.to_numpy()) * y_std + y_mean)
 
 table = pd.DataFrame({
-    'True MPG': y_test.to_numpy().flatten(),
-    'Predicted MPG': perceptron.forward(X_test.to_numpy()).flatten() 
+    'True MPG': y_test.to_numpy().flatten() * y_std + y_mean,
+    'Predicted MPG': pred_y.flatten() 
 })
 print("\nSample Predictions on Test Data:")
 print(table)
+
+print(f"Final Training Loss: {training_loss[-1]:.4f}")
+print(f"Final Validation Loss: {validation_loss[-1]:.4f}")
