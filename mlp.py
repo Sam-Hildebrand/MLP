@@ -241,7 +241,7 @@ class MultilayerPerceptron:
 
         return dl_dw_all, dl_db_all
 
-    def train(self, train_x: np.ndarray, train_y: np.ndarray, val_x: np.ndarray, val_y: np.ndarray, loss_func: LossFunction, learning_rate: float=1E-3, batch_size: int=16, epochs: int=32) -> Tuple[np.ndarray, np.ndarray]:
+    def train(self, train_x: np.ndarray, train_y: np.ndarray, val_x: np.ndarray, val_y: np.ndarray, loss_func: LossFunction, learning_rate: float=1E-3, batch_size: int=16, epochs: int=32,  rmsprop: bool=False) -> Tuple[np.ndarray, np.ndarray]:
         """
         Train the multilayer perceptron
 

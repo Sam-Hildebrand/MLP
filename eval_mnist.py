@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pickle
 import matplotlib.pyplot as plt
-from Train_MNIST import download_mnist
+from train_mnist import download_mnist
 
 if not os.path.exists("MNIST_model.pkl"):
     print("Run `python3 MNIST_train.py` first to train the model.")
