@@ -61,7 +61,7 @@ if __name__ == "__main__":
         loss_func=mlp.SquaredError(),
         learning_rate=0.001,
         batch_size=32,
-        epochs=32,
+        epochs=64,
         rmsprop=True
     )
 

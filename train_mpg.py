@@ -81,8 +81,8 @@ print(f"Samples in Validation: {len(X_val)}")
 print(f"Samples in Testing:    {len(X_test)}")
 
 layers = [
-    mlp.Layer(7, 128, mlp.Relu()),
-    mlp.Layer(128, 256, mlp.Relu()),
+    mlp.Layer(7, 128, mlp.Sigmoid()),
+    mlp.Layer(128, 256, mlp.Sigmoid()),
     mlp.Layer(256, 64, mlp.Relu()),
     mlp.Layer(64, 1, mlp.Linear())
 ]
@@ -91,7 +91,7 @@ perceptron = mlp.MultilayerPerceptron(layers)
 
 training_loss, validation_loss = perceptron.train(X_train.to_numpy(), y_train.to_numpy(), 
                                                   X_val.to_numpy(), y_val.to_numpy(), mlp.SquaredError(), 
-                                                  learning_rate=0.001, epochs=40, batch_size=16, rmsprop=True)
+                                                  learning_rate=0.00001, epochs=256, batch_size=16, rmsprop=True)
 
 plt.plot(training_loss, color='b', label='Training')
 plt.plot(validation_loss, color='r',linestyle='dashed', label="Validation")
@@ -103,11 +103,15 @@ plt.show()
 
 pred_y = np.round(perceptron.forward(X_test.to_numpy()) * y_std + y_mean)
 
-table = pd.DataFrame({
-    'True MPG': y_test.to_numpy().flatten() * y_std + y_mean,
-    'Predicted MPG': pred_y.flatten() 
-})
-print("\nSample Predictions on Test Data:")
+# Create DataFrame with feature values
+X_test_df = pd.DataFrame(X_test * X_std + X_mean, columns=X.columns)
+
+# Combine feature values with predictions and true values
+table = pd.concat([X_test_df.reset_index(drop=True), 
+                   pd.DataFrame({'True MPG': y_test.to_numpy().flatten() * y_std + y_mean,
+                                 'Predicted MPG': pred_y.flatten()})], axis=1)
+
+print("\nSample Predictions on Test Data with Features:")
 print(table)
 
 print(f"Final Training Loss: {training_loss[-1]:.4f}")
