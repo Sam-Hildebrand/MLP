@@ -20,7 +20,6 @@ def graph_activation_function(Activation_Function, function_name):
 graph_activation_function(mlp.Sigmoid(), "Sigmoid")
 graph_activation_function(mlp.Tanh(), "Tanh")
 graph_activation_function(mlp.Relu(), "Relu")
-graph_activation_function(mlp.Softmax(), "Softmax")
 graph_activation_function(mlp.Linear(), "Linear")
 graph_activation_function(mlp.Softplus(), "Softplus")
 graph_activation_function(mlp.Mish(), "Mish")

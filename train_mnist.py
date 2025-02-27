@@ -43,7 +43,6 @@ if __name__ == "__main__":
     # Load and preprocess the MNIST dataset
     train_x, train_y, val_x, val_y, test_x, test_y = download_mnist()
 
-    # Define the MLP model
     layers = [
         mlp.Layer(28 * 28, 512, mlp.Relu()),
         mlp.Layer(512, 256, mlp.Relu()),
@@ -61,7 +60,7 @@ if __name__ == "__main__":
         loss_func=mlp.SquaredError(),
         learning_rate=0.001,
         batch_size=32,
-        epochs=64,
+        epochs=32,
         rmsprop=True
     )
 

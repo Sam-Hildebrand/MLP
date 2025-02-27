@@ -83,13 +83,14 @@ class Relu(ActivationFunction):
 
 class Softmax(ActivationFunction):
     def forward(self, x: np.ndarray) -> np.ndarray:
-            exp_x = np.exp(x - np.max(x, axis=1, keepdims=True))
-            return exp_x / exp_x.sum()
+            exp_x = np.exp(x - np.max(x, axis=-1, keepdims=True))
+            return exp_x / np.sum(exp_x, axis=-1, keepdims=True)
 
     def derivative(self, x: np.ndarray) -> np.ndarray:
         Sx: np.ndarray = self.forward(x)
-        print("Sx shape: ", Sx.shape)
-        return np.diagflat(Sx) - np.dot(Sx, Sx.T)
+        diag = np.einsum("ij,jk->ik ", Sx, np.eye(Sx.shape[-1]))
+        outer = np.einsum("ij,ik->ik",Sx, Sx)
+        return diag - outer
 
 class Linear(ActivationFunction):
     def forward(self, x: np.ndarray) -> np.ndarray:
@@ -175,6 +176,7 @@ class Layer:
         self.z = np.dot(h, self.W) + self.b
         self.activations = self.activation_function.forward(self.z)
 
+        # Dropout implementation
         if training and self.dropout_rate > 0.0:
             self.dropout_mask = (np.random.rand(*self.activations.shape) > self.dropout_rate).astype(float)
             self.dropout_mask /= (1 - self.dropout_rate)
@@ -267,6 +269,7 @@ class MultilayerPerceptron:
             sq_grads_W = [np.zeros_like(layer.W) for layer in self.layers]
             sq_grads_b = [np.zeros_like(layer.b) for layer in self.layers]
 
+        # Training Loop
         for epoch in tqdm(range(epochs), desc='Training'):
             epoch_loss, n_train = 0.0, 0.0
             
